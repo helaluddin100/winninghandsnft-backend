@@ -1,0 +1,291 @@
+// SPDX-License-Identifier: MIT
+pragma solidity >= 0.7.0 < 0.9.0;
+
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/utils/Counters.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts@4.5.0/utils/cryptography/MerkleProof.sol";
+
+contract DrunkenMonsterMavenClub is ERC721, Ownable {
+    using Strings for uint256;
+    using Counters for Counters.Counter;
+
+    Counters.Counter private supply;
+
+    // URI
+    string public uriPrefix = "ipfs://{cid}/";
+    string public uriSuffix = ".json";
+    
+    // Cost
+    uint256 public presaleCost = 0.1 ether;
+    uint256 public publicsaleCost = 0.12 ether;
+
+    // Supply
+    uint256 public maxSupply = 10500;
+    uint256 public maxSupplyLimit = 10500;
+    uint256 public freesaleSupply = 150;
+
+    // Per Address & TX Limit
+    uint256 public nftFreesalePerAddressLimit = 2;
+    uint256 public nftPresalePerAddressLimit = 100;
+    uint256 public nftPublicsalePerAddressLimit = 100;
+
+    // States
+    bool public paused = false;
+    
+    bool public presale = false;
+
+    // Minted Balance
+    mapping(address => uint256) public addressFreesaleMintedBalance;
+    mapping(address => uint256) public addressPresaleMintedBalance;
+    mapping(address => uint256) public addressPublicsaleMintedBalance;
+
+    // Merkle Tree Root
+    bytes32 public freesaleMerkleTreeRoot;
+    bytes32 public presaleMerkleTreeRoot;
+    bytes32 public publicsaleMerkleTreeRoot;
+
+    // Constructor
+    constructor() ERC721("Drunken Monster Maven Club", "DMVC") {
+        freesaleMerkleTreeRoot = 0x132c61eadfcb8716f48cef81a5777c49a1f0c8e198b338335b7471320f53a0a2;
+        presaleMerkleTreeRoot = 0x132c61eadfcb8716f48cef81a5777c49a1f0c8e198b338335b7471320f53a0a2;
+        publicsaleMerkleTreeRoot = 0x132c61eadfcb8716f48cef81a5777c49a1f0c8e198b338335b7471320f53a0a2;
+    }
+
+    // Functions: URI
+    function _baseURI() internal view virtual override returns (string memory) {
+        return uriPrefix;
+    }
+
+    function setUriPrefix(string memory _uriPrefix) public onlyOwner {
+        uriPrefix = _uriPrefix;
+    }
+
+    function setUriSuffix(string memory _uriSuffix) public onlyOwner {
+        uriSuffix = _uriSuffix;
+    }
+
+    // Functions: Cost
+    function setPresaleCost(uint256 _cost) public onlyOwner {
+        presaleCost = _cost;
+    }
+
+    function setPublicsaleCost(uint256 _cost) public onlyOwner {
+        publicsaleCost = _cost;
+    }
+
+    // Functions: Supply
+    function setMaxSupply(uint256 _supply) public onlyOwner {
+        maxSupply = _supply;
+    }
+
+    function setMaxSupplyLimit(uint256 _supply) public onlyOwner {
+        maxSupplyLimit = _supply;
+    }
+
+    function setFreesaleSupply(uint256 _supply) public onlyOwner {
+        freesaleSupply = _supply;
+    }
+
+    // Functions: Per Address & TX Limit
+    function setNFTFreesalePerAddressLimit(uint256 _limit) public onlyOwner {
+        nftFreesalePerAddressLimit = _limit;
+    }
+
+    function setNFTPresalePerAddressLimit(uint256 _limit) public onlyOwner {
+        nftPresalePerAddressLimit = _limit;
+    }
+
+    function setNFTPublicsalePerAddressLimit(uint256 _limit) public onlyOwner {
+        nftPublicsalePerAddressLimit = _limit;
+    }
+
+    // Functions: States
+    function setPaused(bool _state) public onlyOwner {
+        paused = _state;
+    }
+
+    function setPresale(bool _state) public onlyOwner {
+        presale = _state;
+    }
+
+    // Functions: Merkle Tree Root
+    function setFreesaleMerkleTreeRoot(bytes32 _root) public onlyOwner {
+        freesaleMerkleTreeRoot = _root;
+    }
+
+    function setPresaleMerkleTreeRoot(bytes32 _root) public onlyOwner {
+        presaleMerkleTreeRoot = _root;
+    }
+
+    function setPublicsaleMerkleTreeRoot(bytes32 _root) public onlyOwner {
+        publicsaleMerkleTreeRoot = _root;
+    }
+
+    // Functions: Fresale Mint
+    function freesaleMint(uint256 _mintAmount, bytes32[] memory _merkleTreeProof) public payable freesaleMintCompliance(_mintAmount, _merkleTreeProof) {
+        require(!paused, "MSG: The contract is paused");
+        require(supply.current() < freesaleSupply && presale == false, "MSG: Publicsale is not live yet");
+
+        require(msg.value >= publicsaleCost * _mintAmount, "MSG: Insufficient funds");
+        
+        _freesaleMintLoop(msg.sender, _mintAmount);
+    }
+
+    // Functions: Publicsale Mint Helpers
+    modifier freesaleMintCompliance(uint256 _mintAmount, bytes32[] memory _merkleTreeProof) {
+        require(isValidFreesaleMerkleTreeProof(_merkleTreeProof, keccak256(abi.encodePacked(msg.sender))), "MSG: User is not whitelisted");
+
+        uint256 ownerMintedCount = addressFreesaleMintedBalance[msg.sender];
+        require(ownerMintedCount + _mintAmount <= nftFreesalePerAddressLimit, "MSG: Max NFT per address exceeded for freesale");
+
+        require(supply.current() + _mintAmount <= maxSupplyLimit, "MSG: Max supply exceeded");
+        _;
+    }
+
+    function _freesaleMintLoop(address _receiver, uint256 _mintAmount) internal {
+        for (uint256 i = 0; i < _mintAmount; i++) {
+            supply.increment();
+
+            _safeMint(_receiver, supply.current());
+
+            addressFreesaleMintedBalance[msg.sender]++;
+        }
+    }
+
+    // Functions: Presale Mint
+    function presaleMint(uint256 _mintAmount, bytes32[] memory _merkleTreeProof) public payable presaleMintCompliance(_mintAmount, _merkleTreeProof) {
+        require(!paused, "MSG: The contract is paused");
+        require(supply.current() >= freesaleSupply && presale == true, "MSG: Presale is not live yet");
+
+        require(msg.value >= presaleCost * _mintAmount, "MSG: Insufficient funds");
+        
+        _presaleMintLoop(msg.sender, _mintAmount);
+    }
+
+    // Functions: Presale Mint Helpers
+    modifier presaleMintCompliance(uint256 _mintAmount, bytes32[] memory _merkleTreeProof) {
+        require(isValidPresaleMerkleTreeProof(_merkleTreeProof, keccak256(abi.encodePacked(msg.sender))), "MSG: User is not whitelisted");
+
+        uint256 ownerMintedCount = addressPresaleMintedBalance[msg.sender];
+        require(ownerMintedCount + _mintAmount <= nftPresalePerAddressLimit, "MSG: Max NFT per address exceeded for presale");
+
+        require(supply.current() + _mintAmount <= maxSupplyLimit, "MSG: Max supply exceeded");
+        _;
+    }
+
+    function _presaleMintLoop(address _receiver, uint256 _mintAmount) internal {
+        for (uint256 i = 0; i < _mintAmount; i++) {
+            supply.increment();
+
+            _safeMint(_receiver, supply.current());
+
+            addressPresaleMintedBalance[msg.sender]++;
+        }
+    }
+
+    // Functions: Publicsale Mint
+    function publicsaleMint(uint256 _mintAmount, bytes32[] memory _merkleTreeProof) public payable publicsaleMintCompliance(_mintAmount, _merkleTreeProof) {
+        require(!paused, "MSG: The contract is paused");
+        require(supply.current() >= freesaleSupply && presale == false, "MSG: Publicsale is not live yet");
+
+        require(msg.value >= publicsaleCost * _mintAmount, "MSG: Insufficient funds");
+        
+        _publicsaleMintLoop(msg.sender, _mintAmount);
+    }
+
+    // Functions: Publicsale Mint Helpers
+    modifier publicsaleMintCompliance(uint256 _mintAmount, bytes32[] memory _merkleTreeProof) {
+        require(isValidPublicsaleMerkleTreeProof(_merkleTreeProof, keccak256(abi.encodePacked(msg.sender))), "MSG: User is not whitelisted");
+
+        uint256 ownerMintedCount = addressPublicsaleMintedBalance[msg.sender];
+        require(ownerMintedCount + _mintAmount <= nftPublicsalePerAddressLimit, "MSG: Max NFT per address exceeded for publicsale");
+
+        require(supply.current() + _mintAmount <= maxSupplyLimit, "MSG: Max supply exceeded");
+        _;
+    }
+
+    function _publicsaleMintLoop(address _receiver, uint256 _mintAmount) internal {
+        for (uint256 i = 0; i < _mintAmount; i++) {
+            supply.increment();
+
+            _safeMint(_receiver, supply.current());
+
+            addressPublicsaleMintedBalance[msg.sender]++;
+        }
+    }
+
+    // Functions: Merkle Tree Proof
+    function isValidFreesaleMerkleTreeProof(bytes32[] memory proof, bytes32 leaf) public view returns (bool) {
+        return MerkleProof.verify(proof, freesaleMerkleTreeRoot, leaf);
+    }
+
+    function isValidPresaleMerkleTreeProof(bytes32[] memory proof, bytes32 leaf) public view returns (bool) {
+        return MerkleProof.verify(proof, presaleMerkleTreeRoot, leaf);
+    }
+
+    function isValidPublicsaleMerkleTreeProof(bytes32[] memory proof, bytes32 leaf) public view returns (bool) {
+        return MerkleProof.verify(proof, publicsaleMerkleTreeRoot, leaf);
+    }
+
+    // Functions: Owner Mint
+    function ownerMint(uint256 _mintAmount) public onlyOwner {
+        require(!paused, "MSG: The contract is paused");
+
+        _ownerMintLoop(msg.sender, _mintAmount);
+    }
+
+    function ownerMintSpecific(uint256 _tokenID) public onlyOwner {
+        require(!paused, "MSG: The contract is paused");
+
+        _safeMint(msg.sender, _tokenID);
+    }
+
+    // Functions: Owner Mint Helpers
+    function _ownerMintLoop(address _receiver, uint256 _mintAmount) internal {
+        for (uint256 i = 0; i < _mintAmount; i++) {
+            supply.increment();
+
+            _safeMint(_receiver, supply.current());
+        }
+    }
+
+    // Functions: Other
+    function totalSupply() public view returns (uint256) {
+        return supply.current();
+    }
+
+    function tokenURI(uint256 _tokenId) public view virtual override returns (string memory) {
+        require(_exists(_tokenId), "MSG: URI query for nonexistent token");
+
+        string memory currentBaseURI = _baseURI();
+
+        return bytes(currentBaseURI).length > 0 ? string(abi.encodePacked(currentBaseURI, _tokenId.toString(), uriSuffix)) : "";
+    }
+
+    function walletOfOwner(address _owner) public view returns (uint256[] memory) {
+        uint256 ownerTokenCount = balanceOf(_owner);
+        uint256[] memory ownedTokenIds = new uint256[](ownerTokenCount);
+
+        uint256 currentTokenId = 1;
+        uint256 ownedTokenIndex = 0;
+
+        while (ownedTokenIndex < ownerTokenCount && currentTokenId <= maxSupply) {
+            address currentTokenOwner = ownerOf(currentTokenId);
+
+            if (currentTokenOwner == _owner) {
+                ownedTokenIds[ownedTokenIndex] = currentTokenId;
+                ownedTokenIndex++;
+            }
+
+            currentTokenId++;
+        }
+
+        return ownedTokenIds;
+    }
+
+    function withdraw() public payable onlyOwner {
+        (bool os, ) = payable(owner()).call{value: address(this).balance}("");
+        require(os);
+    }
+}

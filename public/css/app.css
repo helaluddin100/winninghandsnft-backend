@@ -1,0 +1,27 @@
+.badge-danger {
+    background: #eb3838;
+}
+
+.badge-success {
+    background: #28ba4c;
+}
+
+.swal2-actions {
+    grid-gap: 20px;
+}
+
+.download i {
+    font-size: 30px;
+}
+
+.link-danger {
+    cursor: pointer;
+}
+
+i.ri-file-fill {
+    font-size: 23px;
+}
+
+.app-menu.navbar-menu {
+    padding-top: 20px;
+}

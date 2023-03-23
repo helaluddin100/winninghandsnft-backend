@@ -1,0 +1,27 @@
+Image elements do not have explicit `width` and `height`.
+
+This Webpage Is Not Using HTTP/2 Protocol
+
+
+Warning, your server signature is ON.
+
+Your webpage include email addresses in plaintext.
+
+ redirect is not place to redirect traffic from your non-preferred domain. Your website does not directs www. nftconstructer.com and nftconstructer.com to the same URL.
+
+
+Your web page does not using cache techniques, try implementing cache to improve speed.
+Low
+
+
+OG TAG 
+<meta property="og:title" content=NFT Website Development Services |Full Stack Web Tech Services>
+<meta property="og:site_name" content=NFT CONSTRUCTER>
+<meta property="og:url" content=https://www.nftconstructer.com/>
+<meta property="og:description" content=We provide NFT website development services for digital content such as art, music, and videos, domain names, gaming items, investments, and other physical items that are unique Contact us!>
+<meta property="og:type" content=website>
+<meta property="og:image" content=https://www.nftconstructer.com/assets/img/logo/logo.svg>
+
+schema
+
+
